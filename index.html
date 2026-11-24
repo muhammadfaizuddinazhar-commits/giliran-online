@@ -14,6 +14,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- HTML5-QRCode untuk mengimbas Kod QR melalui kamera -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- PeerJS untuk sambungan terus antara peranti (Telefon <-> Laptop/iPad) tanpa pelayan khas -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
     <style>
         body {
@@ -69,11 +71,11 @@
                     </div>
                     <div>
                         <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Sistem Giliran Anugerah</h1>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <p class="text-indigo-200 text-xs sm:text-sm">Pengurusan Barisan Pentas Berasaskan Kod QR</p>
-                            <span id="sync-status-badge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                                <span id="sync-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                                <span id="sync-status-text">Menyambung...</span>
+                        <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <p class="text-indigo-200 text-xs sm:text-sm">Pengurusan Barisan Pentas</p>
+                            <span id="sync-status-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                                <span id="sync-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                <span id="sync-status-text">Mod Tunggal (Belum Disambung)</span>
                             </span>
                         </div>
                     </div>
@@ -81,9 +83,9 @@
 
                 <!-- Butang Navigasi Tab & Tetapan Bilik -->
                 <div class="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
-                    <button onclick="openRoomModal()" class="w-full sm:w-auto px-3 py-2 rounded-xl text-xs font-bold bg-indigo-800 hover:bg-indigo-700 text-amber-300 border border-indigo-600 transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-wifi"></i>
-                        <span>Kod Majlis: <span id="current-room-display" class="underline">MAJLIS-1</span></span>
+                    <button onclick="openRoomModal()" class="w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-tower-broadcast"></i>
+                        <span>Sambung Peranti: <span id="current-room-display" class="underline">TIADA</span></span>
                     </button>
 
                     <nav class="flex bg-indigo-950/60 p-1.5 rounded-xl w-full sm:w-auto overflow-x-auto">
@@ -109,34 +111,56 @@
     <!-- Kotak Notifikasi (Ganti alert) -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-    <!-- Modal Tetapan Kod Majlis (Sambungan Antara Peranti) -->
+    <!-- Modal Tetapan Sambungan Antara Peranti (Host / Pengimbas) -->
     <div id="room-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
-            <div class="flex items-center gap-3 text-indigo-700 mb-3">
-                <div class="bg-indigo-100 p-3 rounded-full">
-                    <i class="fa-solid fa-tower-broadcast text-xl"></i>
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl transform transition-all max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start mb-4">
+                <div class="flex items-center gap-3 text-indigo-700">
+                    <div class="bg-indigo-100 p-3 rounded-full">
+                        <i class="fa-solid fa-tower-broadcast text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Sambungan Telefon ke Laptop/iPad</h3>
+                        <p class="text-xs text-slate-500">Berfungsi terus di GitHub Pages secara masa nyata</p>
+                    </div>
                 </div>
-                <div>
-                    <h3 class="text-lg font-bold text-slate-900">Sambungan Antara Peranti</h3>
-                    <p class="text-xs text-slate-500">Segerakkan telefon pengimbas dengan iPad/Laptop</p>
+                <button onclick="closeRoomModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Langkah 1: Mod Paparan Utama (Laptop / iPad) -->
+            <div class="p-4 bg-indigo-50/80 border border-indigo-200 rounded-xl mb-4">
+                <span class="inline-block px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-bold uppercase rounded mb-1.5">Pilihan A: Pada Laptop / iPad (Skrin Pentas)</span>
+                <p class="text-xs text-slate-600 mb-3">
+                    Jadikan peranti ini sebagai <strong>Penerima Utama</strong>. Masukkan kod ringkas pilihan anda dan klik "Buka Bilik".
+                </p>
+                <div class="flex gap-2">
+                    <input type="text" id="host-code-input" placeholder="Cth: SKTAWAU" maxlength="15"
+                        class="flex-1 bg-white border border-indigo-300 rounded-xl px-3.5 py-2 text-sm font-bold uppercase text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button onclick="startAsHost()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow transition whitespace-nowrap">
+                        <i class="fa-solid fa-desktop mr-1"></i> Buka Bilik
+                    </button>
+                </div>
+                <div id="host-active-info" class="hidden mt-3 pt-3 border-t border-indigo-200/70 text-xs text-indigo-900">
+                    <p class="font-semibold"><i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Bilik Aktif! Kod Majlis: <strong id="active-host-code" class="text-sm bg-white px-2 py-0.5 rounded border border-indigo-200"></strong></p>
+                    <p class="text-slate-600 mt-1">Peranti pengimbas disambungkan: <strong id="connected-peers-count">0</strong></p>
                 </div>
             </div>
-            <p class="text-slate-600 text-sm mb-4 leading-relaxed">
-                Masukkan <strong>Kod Majlis</strong> yang sama pada telefon guru dan iPad/laptop pengacara majlis. Setiap imbasan akan terus dipaparkan secara langsung!
-            </p>
-            <div class="mb-5">
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Kod Majlis Sekolah Anda</label>
-                <input type="text" id="room-code-input" placeholder="Contoh: ANUGERAH-SK1" 
-                    class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-base font-bold uppercase text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-            <div class="flex justify-end gap-3">
-                <button onclick="closeRoomModal()" class="px-4 py-2.5 rounded-xl font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
-                    Batal
-                </button>
-                <button onclick="saveRoomCode()" class="px-5 py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition flex items-center gap-2">
-                    <i class="fa-solid fa-link"></i>
-                    <span>Sambung Sekarang</span>
-                </button>
+
+            <!-- Langkah 2: Mod Pengimbas (Telefon Guru) -->
+            <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
+                <span class="inline-block px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-bold uppercase rounded mb-1.5">Pilihan B: Pada Telefon Guru (Pengimbas QR)</span>
+                <p class="text-xs text-slate-600 mb-3">
+                    Masukkan <strong>Kod Majlis</strong> yang telah dibuka pada Laptop/iPad di atas untuk menghantar imbasan terus ke skrin utama.
+                </p>
+                <div class="flex gap-2">
+                    <input type="text" id="client-code-input" placeholder="Masukkan Kod dari Laptop" maxlength="15"
+                        class="flex-1 bg-white border border-emerald-300 rounded-xl px-3.5 py-2 text-sm font-bold uppercase text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <button onclick="connectAsClient()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow transition whitespace-nowrap">
+                        <i class="fa-solid fa-link mr-1"></i> Sambung
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -419,22 +443,8 @@
 
     </main>
 
-    <!-- Skrip Aplikasi dengan Penyegerakan Awan Masa Nyata -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Konfigurasi Awan
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-award-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-
-        let db = null;
-        let auth = null;
-        let currentUser = null;
-        let unsubscribeRoom = null;
-        let currentRoomCode = "MAJLIS-1";
-
+    <!-- Skrip Aplikasi dengan Sambungan Terus Peer-to-Peer (WebRTC) -->
+    <script>
         // ==========================================
         // PENGURUSAN STATE & PENYIMPANAN
         // ==========================================
@@ -443,6 +453,14 @@
         let isScanning = false;
         let lastScannedText = "";
         let lastScannedTime = 0;
+
+        // Pemboleh ubah PeerJS (Sambungan Terus Telefon <-> Laptop)
+        const PEER_PREFIX = "GILSIS-MY-2026-";
+        let peer = null;
+        let deviceRole = "none"; // "host" (Laptop/iPad) atau "client" (Telefon)
+        let currentRoomCode = "";
+        let hostConnections = []; // Simpan sambungan telefon jika peranti ini adalah Host
+        let clientConnection = null; // Simpan sambungan ke Laptop jika peranti ini adalah Client
 
         // Konteks Audio untuk bunyi 'Beep' apabila berjaya imbas
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -467,105 +485,170 @@
             }
         }
 
-        function updateSyncStatus(status, text) {
+        function updateSyncStatus(status, text, badgeLabel) {
             const dot = document.getElementById('sync-dot');
             const label = document.getElementById('sync-status-text');
+            const roomDisplay = document.getElementById('current-room-display');
             if (!dot || !label) return;
 
             label.innerText = text;
+            if (badgeLabel) roomDisplay.innerText = badgeLabel;
+
             dot.className = "w-2 h-2 rounded-full " + (
                 status === 'connected' ? "bg-emerald-400" :
                 status === 'error' ? "bg-rose-500" : "bg-amber-400 animate-pulse"
             );
         }
 
-        // Inisialisasi Pengesahan & Sambungan Awan
-        async function initCloudSync() {
-            // Semak jika kod majlis ada dalam parameter URL (?majlis=KOD)
-            const urlParams = new URLSearchParams(window.location.search);
-            const roomParam = urlParams.get('majlis');
-            if (roomParam && roomParam.trim() !== "") {
-                currentRoomCode = roomParam.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+        // ==========================================
+        // LOGIK SAMBUNGAN ANTARA PERANTI (PEERJS)
+        // ==========================================
+        function cleanupPeer() {
+            if (peer) {
+                try { peer.destroy(); } catch (e) {}
+                peer = null;
             }
-            document.getElementById('current-room-display').innerText = currentRoomCode;
+            hostConnections = [];
+            clientConnection = null;
+            deviceRole = "none";
+        }
 
-            if (!firebaseConfig) {
-                updateSyncStatus('error', 'Mod Luar Talian');
-                renderAll();
+        // 1. Jadikan peranti ini sebagai HOST (Laptop / iPad)
+        window.startAsHost = function() {
+            const rawCode = document.getElementById('host-code-input').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!rawCode || rawCode.length < 3) {
+                showToast("Sila masukkan sekurang-kurangnya 3 huruf/nombor (cth: SKTAWAU).", "warning");
                 return;
             }
 
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
+            cleanupPeer();
+            deviceRole = "host";
+            currentRoomCode = rawCode;
+            updateSyncStatus('connecting', 'Membuka Bilik...', currentRoomCode);
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+            peer = new Peer(PEER_PREFIX + currentRoomCode, { debug: 1 });
 
-                onAuthStateChanged(auth, (user) => {
-                    currentUser = user;
-                    if (user) {
-                        subscribeToRoom(currentRoomCode);
+            peer.on('open', (id) => {
+                updateSyncStatus('connected', `Bilik Aktif (0 Telefon)`, currentRoomCode);
+                document.getElementById('host-active-info').classList.remove('hidden');
+                document.getElementById('active-host-code').innerText = currentRoomCode;
+                document.getElementById('connected-peers-count').innerText = "0";
+                showToast(`Bilik "${currentRoomCode}" sedia menerima imbasan daripada telefon!`, "success");
+                closeRoomModal();
+            });
+
+            peer.on('connection', (conn) => {
+                hostConnections.push(conn);
+                updateHostPeerCount();
+                showToast("Telefon guru berjaya disambungkan!", "success");
+
+                // Hantar keadaan terkini kepada telefon yang baru menyambung
+                conn.on('open', () => {
+                    conn.send({
+                        type: 'SYNC_STATE',
+                        queue: studentQueue,
+                        awardTitle: document.getElementById('award-title').value
+                    });
+                });
+
+                // Terima data imbasan / arahan daripada telefon
+                conn.on('data', (data) => {
+                    if (data.type === 'ADD_STUDENT') {
+                        addStudentToQueue(data.rawText, true);
+                    } else if (data.type === 'REMOVE_STUDENT') {
+                        removeStudent(data.id, true);
+                    } else if (data.type === 'RESET_QUEUE') {
+                        confirmResetQueue(true);
                     }
                 });
-            } catch (err) {
-                console.error("Ralat sambungan awan:", err);
-                updateSyncStatus('error', 'Ralat Sambungan');
-                renderAll();
-            }
+
+                conn.on('close', () => {
+                    hostConnections = hostConnections.filter(c => c !== conn);
+                    updateHostPeerCount();
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error("Ralat Peer Host:", err);
+                if (err.type === 'unavailable-id') {
+                    showToast(`Kod "${currentRoomCode}" sedang digunakan. Sila guna kod lain (cth: ${currentRoomCode}2).`, "error");
+                } else {
+                    showToast("Ralat sambungan rangkaian. Sila semak internet anda.", "error");
+                }
+                updateSyncStatus('error', 'Ralat Bilik', 'RALAT');
+            });
+        };
+
+        function updateHostPeerCount() {
+            const activeConns = hostConnections.filter(c => c.open);
+            const count = activeConns.length;
+            document.getElementById('connected-peers-count').innerText = count;
+            updateSyncStatus('connected', `Bilik Aktif (${count} Telefon)`, currentRoomCode);
         }
 
-        function subscribeToRoom(roomCode) {
-            if (!db || !currentUser) return;
-            if (unsubscribeRoom) {
-                unsubscribeRoom();
-            }
-
-            updateSyncStatus('connecting', 'Menyambung...');
-            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'award_rooms', roomCode);
-
-            unsubscribeRoom = onSnapshot(roomDocRef, (snapshot) => {
-                updateSyncStatus('connected', 'Langsung (Sync)');
-                if (snapshot.exists()) {
-                    const data = snapshot.data();
-                    studentQueue = Array.isArray(data.queue) ? data.queue : [];
-                    if (data.awardTitle && document.activeElement.id !== 'award-title') {
-                        document.getElementById('award-title').value = data.awardTitle;
-                    }
-                } else {
-                    studentQueue = [];
+        function broadcastToClients() {
+            if (deviceRole !== "host") return;
+            const payload = {
+                type: 'SYNC_STATE',
+                queue: studentQueue,
+                awardTitle: document.getElementById('award-title').value
+            };
+            hostConnections.forEach(conn => {
+                if (conn.open) {
+                    conn.send(payload);
                 }
-                renderAll();
-            }, (error) => {
-                console.error("Ralat mendengar perubahan:", error);
-                updateSyncStatus('error', 'Terputus');
             });
         }
 
-        async function saveStateToCloud() {
-            renderAll(); // Kemas kini paparan serta-merta secara optimistik
-            if (!db || !currentUser) return;
-
-            try {
-                const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'award_rooms', currentRoomCode);
-                const title = document.getElementById('award-title').value;
-                await setDoc(roomDocRef, {
-                    queue: studentQueue,
-                    awardTitle: title,
-                    updatedAt: Date.now()
-                }, { merge: true });
-            } catch (err) {
-                console.error("Gagal menyimpan ke awan:", err);
-                showToast("Gagal menyegerakkan data ke peranti lain.", "error");
+        // 2. Sambungkan peranti ini sebagai CLIENT (Telefon Pengimbas)
+        window.connectAsClient = function() {
+            const rawCode = document.getElementById('client-code-input').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!rawCode) {
+                showToast("Sila masukkan Kod Majlis yang dipaparkan di Laptop/iPad.", "warning");
+                return;
             }
-        }
+
+            cleanupPeer();
+            deviceRole = "client";
+            currentRoomCode = rawCode;
+            updateSyncStatus('connecting', 'Menyambung ke Laptop...', currentRoomCode);
+
+            peer = new Peer({ debug: 1 });
+
+            peer.on('open', () => {
+                clientConnection = peer.connect(PEER_PREFIX + currentRoomCode, { reliable: true });
+
+                clientConnection.on('open', () => {
+                    updateSyncStatus('connected', `Disambung ke ${currentRoomCode}`, currentRoomCode);
+                    showToast(`Berjaya disambungkan ke Laptop (${currentRoomCode})!`, "success");
+                    closeRoomModal();
+                    switchTab('scanner'); // Terus buka tab pengimbas pada telefon
+                });
+
+                clientConnection.on('data', (data) => {
+                    if (data.type === 'SYNC_STATE') {
+                        studentQueue = Array.isArray(data.queue) ? data.queue : [];
+                        if (data.awardTitle && document.activeElement.id !== 'award-title') {
+                            document.getElementById('award-title').value = data.awardTitle;
+                        }
+                        renderAll();
+                    }
+                });
+
+                clientConnection.on('close', () => {
+                    updateSyncStatus('error', 'Terputus dari Laptop', 'TERPUTUS');
+                    showToast("Sambungan ke Laptop terputus. Sila sambung semula.", "error");
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error("Ralat Peer Client:", err);
+                updateSyncStatus('error', 'Gagal Sambung', 'RALAT');
+                showToast(`Kod Majlis "${currentRoomCode}" tidak ditemui. Pastikan Laptop sudah menekan 'Buka Bilik'.`, "error");
+            });
+        };
 
         window.openRoomModal = function() {
-            document.getElementById('room-code-input').value = currentRoomCode;
             const modal = document.getElementById('room-modal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
@@ -577,33 +660,13 @@
             modal.classList.remove('flex');
         };
 
-        window.saveRoomCode = function() {
-            const rawCode = document.getElementById('room-code-input').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-            if (!rawCode) {
-                showToast("Sila masukkan kod majlis yang sah.", "warning");
-                return;
-            }
-            currentRoomCode = rawCode;
-            document.getElementById('current-room-display').innerText = currentRoomCode;
-            
-            // Kemas kini URL supaya mudah dikongsi
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.set('majlis', currentRoomCode);
-            window.history.replaceState({}, '', newUrl);
-
-            closeRoomModal();
-            subscribeToRoom(currentRoomCode);
-            showToast(`Disambungkan ke Kod Majlis: ${currentRoomCode}`, "success");
-        };
-
         window.saveAwardTitle = function() {
-            saveStateToCloud();
-            showToast("Tajuk anugerah dikemas kini pada semua peranti", "info");
+            broadcastToClients();
+            showToast("Tajuk anugerah dikemas kini", "info");
         };
 
-        // Muatkan sambungan semasa halaman dibuka
         window.addEventListener('load', () => {
-            initCloudSync();
+            renderAll();
         });
 
         // ==========================================
@@ -629,8 +692,20 @@
         // ==========================================
         // LOGIK GILIRAN (TAMBAH, PADAM, RESET)
         // ==========================================
-        function addStudentToQueue(rawText) {
+        function addStudentToQueue(rawText, fromRemote = false) {
             if (!rawText || rawText.trim() === "") return;
+
+            // Jika peranti ini adalah Telefon (Client), hantar terus ke Laptop (Host)
+            if (deviceRole === "client" && !fromRemote) {
+                if (clientConnection && clientConnection.open) {
+                    clientConnection.send({ type: 'ADD_STUDENT', rawText: rawText });
+                    playBeepSound();
+                    showToast(`Dihantar ke Laptop: ${rawText.split('|')[0].trim()}`, "success");
+                } else {
+                    showToast("Sambungan ke Laptop terputus! Sila tekan 'Sambung Peranti' di atas.", "error");
+                }
+                return;
+            }
 
             let name = rawText.trim();
             let studentClass = "";
@@ -664,7 +739,8 @@
 
             studentQueue.push(newEntry);
             playBeepSound();
-            saveStateToCloud();
+            renderAll();
+            broadcastToClients();
             showToast(`Berjaya imbas: ${name}`, "success");
         }
 
@@ -687,7 +763,8 @@
             const index = studentQueue.findIndex(s => s.id === id);
             if (index !== -1) {
                 studentQueue[index].completed = !studentQueue[index].completed;
-                saveStateToCloud();
+                renderAll();
+                broadcastToClients();
             }
         };
 
@@ -699,9 +776,16 @@
             }
         };
 
-        window.removeStudent = function(id) {
+        window.removeStudent = function(id, fromRemote = false) {
+            if (deviceRole === "client" && !fromRemote) {
+                if (clientConnection && clientConnection.open) {
+                    clientConnection.send({ type: 'REMOVE_STUDENT', id: id });
+                }
+                return;
+            }
             studentQueue = studentQueue.filter(s => s.id !== id);
-            saveStateToCloud();
+            renderAll();
+            broadcastToClients();
             showToast("Nama dipadam daripada senarai.", "info");
         };
 
@@ -718,9 +802,17 @@
             modal.classList.remove('flex');
         };
 
-        window.confirmResetQueue = function() {
+        window.confirmResetQueue = function(fromRemote = false) {
+            if (deviceRole === "client" && !fromRemote) {
+                if (clientConnection && clientConnection.open) {
+                    clientConnection.send({ type: 'RESET_QUEUE' });
+                    closeResetModal();
+                }
+                return;
+            }
             studentQueue = [];
-            saveStateToCloud();
+            renderAll();
+            broadcastToClients();
             closeResetModal();
             showToast("Senarai giliran telah di-reset untuk kategori seterusnya!", "success");
         };
