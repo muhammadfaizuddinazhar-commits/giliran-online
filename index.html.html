@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Giliran Anugerah Pelajar (QR)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QRCode.js untuk menjana Kod QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- HTML5-QRCode untuk mengimbas Kod QR melalui kamera -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* Gaya khas untuk cetakan kod QR */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #print-area, #print-area * {
+                visibility: visible;
+            }
+            #print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                display: grid !important;
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 1rem !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+        /* Animasi masuk item baharu */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Bar Navigasi Atas -->
+    <header class="bg-indigo-900 text-white shadow-lg no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-400 text-indigo-950 p-2.5 rounded-xl shadow">
+                        <i class="fa-solid fa-award text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold tracking-tight">Sistem Giliran Anugerah</h1>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <p class="text-indigo-200 text-xs sm:text-sm">Pengurusan Barisan Pentas Berasaskan Kod QR</p>
+                            <span id="sync-status-badge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                                <span id="sync-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                <span id="sync-status-text">Menyambung...</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Butang Navigasi Tab & Tetapan Bilik -->
+                <div class="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                    <button onclick="openRoomModal()" class="w-full sm:w-auto px-3 py-2 rounded-xl text-xs font-bold bg-indigo-800 hover:bg-indigo-700 text-amber-300 border border-indigo-600 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wifi"></i>
+                        <span>Kod Majlis: <span id="current-room-display" class="underline">MAJLIS-1</span></span>
+                    </button>
+
+                    <nav class="flex bg-indigo-950/60 p-1.5 rounded-xl w-full sm:w-auto overflow-x-auto">
+                        <button onclick="switchTab('stage')" id="tab-stage" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 bg-amber-400 text-indigo-950 shadow">
+                            <i class="fa-solid fa-microphone-lines"></i>
+                            <span>Paparan Pentas</span>
+                            <span id="badge-count" class="bg-indigo-900 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+                        </button>
+                        <button onclick="switchTab('scanner')" id="tab-scanner" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold text-indigo-200 hover:text-white transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-qrcode"></i>
+                            <span>Imbas QR (Guru)</span>
+                        </button>
+                        <button onclick="switchTab('generator')" id="tab-generator" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold text-indigo-200 hover:text-white transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-print"></i>
+                            <span>Jana QR Murid</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Kotak Notifikasi (Ganti alert) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Modal Tetapan Kod Majlis (Sambungan Antara Peranti) -->
+    <div id="room-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
+            <div class="flex items-center gap-3 text-indigo-700 mb-3">
+                <div class="bg-indigo-100 p-3 rounded-full">
+                    <i class="fa-solid fa-tower-broadcast text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Sambungan Antara Peranti</h3>
+                    <p class="text-xs text-slate-500">Segerakkan telefon pengimbas dengan iPad/Laptop</p>
+                </div>
+            </div>
+            <p class="text-slate-600 text-sm mb-4 leading-relaxed">
+                Masukkan <strong>Kod Majlis</strong> yang sama pada telefon guru dan iPad/laptop pengacara majlis. Setiap imbasan akan terus dipaparkan secara langsung!
+            </p>
+            <div class="mb-5">
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Kod Majlis Sekolah Anda</label>
+                <input type="text" id="room-code-input" placeholder="Contoh: ANUGERAH-SK1" 
+                    class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-base font-bold uppercase text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeRoomModal()" class="px-4 py-2.5 rounded-xl font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                    Batal
+                </button>
+                <button onclick="saveRoomCode()" class="px-5 py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition flex items-center gap-2">
+                    <i class="fa-solid fa-link"></i>
+                    <span>Sambung Sekarang</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Pengesahan Reset (Ganti confirm) -->
+    <div id="reset-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
+            <div class="flex items-center gap-3 text-rose-600 mb-4">
+                <div class="bg-rose-100 p-3 rounded-full">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Set Semula Senarai Giliran?</h3>
+            </div>
+            <p class="text-slate-600 text-sm mb-6">
+                Adakah anda pasti mahu memadam semua nama murid dalam senarai giliran semasa? Tindakan ini biasanya dilakukan selepas selesai satu kategori anugerah.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeResetModal()" class="px-4 py-2.5 rounded-xl font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                    Batal
+                </button>
+                <button onclick="confirmResetQueue()" class="px-4 py-2.5 rounded-xl font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-md transition flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Ya, Reset Sekarang</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kandungan Utama -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: PAPARAN PENTAS / PENGACARA MAJLIS   -->
+        <!-- ========================================== -->
+        <section id="view-stage" class="tab-view space-y-6">
+            <!-- Kawalan Kategori & Reset -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div class="w-full lg:w-1/2">
+                    <label for="award-title" class="block text-xs font-bold uppercase tracking-wider text-indigo-600 mb-1">
+                        Kategori Anugerah Semasa (Boleh Diedit)
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="award-title" value="ANUGERAH KECEMERLANGAN AKADEMIK - TAHAP 1" 
+                            onchange="saveAwardTitle()"
+                            class="w-full text-lg sm:text-xl font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                        <i class="fa-solid fa-pen text-slate-400 absolute right-4 top-3.5 text-sm pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+                    <button onclick="switchTab('scanner')" class="px-4 py-2.5 rounded-xl font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center gap-2">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>Buka Pengimbas</span>
+                    </button>
+                    <button onclick="openResetModal()" class="px-5 py-2.5 rounded-xl font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i>
+                        <span>Reset Giliran</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sorotan Penerima Seterusnya (Giliran #1) -->
+            <div id="next-student-card" class="hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white p-6 sm:p-8 rounded-2xl shadow-lg border border-indigo-700 relative overflow-hidden">
+                <div class="absolute right-0 top-0 opacity-10 transform translate-x-6 -translate-y-6">
+                    <i class="fa-solid fa-trophy text-9xl"></i>
+                </div>
+                <div class="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-indigo-950 uppercase tracking-wider mb-3">
+                            <span class="w-2 h-2 rounded-full bg-indigo-950 animate-ping"></span>
+                            Sedia Naik Pentas (Giliran #1)
+                        </span>
+                        <h2 id="highlight-name" class="text-2xl sm:text-4xl font-extrabold tracking-tight mb-1">-</h2>
+                        <p id="highlight-class" class="text-indigo-200 text-base sm:text-lg font-medium">-</p>
+                    </div>
+                    <button onclick="markFirstAsDone()" class="w-full sm:w-auto px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-base">
+                        <i class="fa-solid fa-check-double"></i>
+                        <span>Selesai Terima Anugerah</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Senarai Giliran Mengikut Urutan Imbasan -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/70 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol text-indigo-600"></i>
+                        <span>Senarai Susunan Barisan (Mengikut Giliran Scan)</span>
+                    </h3>
+                    <span class="text-xs font-medium text-slate-500" id="queue-status-text">Menunggu imbasan...</span>
+                </div>
+
+                <!-- Keadaan Kosong -->
+                <div id="empty-queue-state" class="p-12 text-center">
+                    <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa-solid fa-users-slash text-2xl"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-slate-700 mb-1">Tiada Murid Dalam Barisan</h4>
+                    <p class="text-slate-500 text-sm max-w-md mx-auto mb-6">
+                        Sila pergi ke tab <strong>Imbas QR (Guru)</strong> untuk mula mengimbas kod QR murid yang sedang beratur di tepi pentas.
+                    </p>
+                    <button onclick="switchTab('scanner')" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow transition inline-flex items-center gap-2">
+                        <i class="fa-solid fa-qrcode"></i>
+                        <span>Mula Imbas QR</span>
+                    </button>
+                </div>
+
+                <!-- Senarai Item -->
+                <div id="queue-list" class="divide-y divide-slate-100 hidden">
+                    <!-- Item akan dimasukkan secara dinamik oleh JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: PENGIMBAS QR GURU                   -->
+        <!-- ========================================== -->
+        <section id="view-scanner" class="tab-view hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Kolum Kamera Pengimbas -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800">Pengimbas Kamera</h2>
+                            <p class="text-xs text-slate-500">Halakan kamera pada kod QR murid di tepi pentas</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="btn-start-scan" onclick="startScanner()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition flex items-center gap-2">
+                                <i class="fa-solid fa-play"></i>
+                                <span>Hidupkan Kamera</span>
+                            </button>
+                            <button id="btn-stop-scan" onclick="stopScanner()" class="hidden px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl shadow-sm transition flex items-center gap-2">
+                                <i class="fa-solid fa-stop"></i>
+                                <span>Hentikan</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Kotak Paparan Kamera -->
+                    <div class="relative bg-slate-900 rounded-2xl overflow-hidden min-h-[300px] flex items-center justify-center border-2 border-dashed border-slate-300">
+                        <div id="reader" class="w-full"></div>
+                        <div id="camera-placeholder" class="text-center p-6 text-slate-400">
+                            <i class="fa-solid fa-camera text-4xl mb-3 text-slate-500"></i>
+                            <p class="text-sm font-medium text-slate-300">Kamera tidak aktif</p>
+                            <p class="text-xs mt-1">Klik butang "Hidupkan Kamera" di atas untuk mula mengimbas.</p>
+                        </div>
+                    </div>
+
+                    <!-- Amaran & Sandaran Khas untuk iPhone / iPad (iOS Safari) -->
+                    <div id="ios-camera-notice" class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+                        <div class="flex items-start gap-2.5">
+                            <i class="fa-solid fa-circle-info text-amber-600 text-base mt-0.5"></i>
+                            <div>
+                                <p class="font-bold text-amber-950">Pengguna iPhone / iPad?</p>
+                                <p class="mt-0.5 leading-relaxed">
+                                    Safari menyekat kamera jika fail ini dibuka terus dari storan telefon (<code class="bg-amber-100 px-1 rounded">file://</code>) atau dari dalam WhatsApp/Telegram. Pastikan laman ini dihoskan menggunakan <strong>HTTPS</strong> (contoh: GitHub Pages, Netlify, Vercel) dan dibuka melalui aplikasi <strong>Safari</strong>.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="pt-2 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-2">
+                            <span class="font-medium text-amber-800">Kamera langsung masih disekat? Guna kamera foto telefon:</span>
+                            <label class="w-full sm:w-auto cursor-pointer px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-indigo-950 font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-camera-retro"></i>
+                                <span>Tangkap Foto QR</span>
+                                <input type="file" id="qr-file-input" accept="image/*" capture="environment" onchange="scanQRFromImage(event)" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Input Manual Pantas (Sekiranya QR rosak/tiada kamera) -->
+                    <div class="mt-6 pt-5 border-t border-slate-100">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                            Input Manual (Jika QR Tidak Dapat Diimbas)
+                        </label>
+                        <form onsubmit="handleManualAdd(event)" class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="manual-name" placeholder="Nama Penuh Murid" required
+                                class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <input type="text" id="manual-class" placeholder="Kelas (cth: 6 Bestari)"
+                                class="sm:w-44 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition whitespace-nowrap">
+                                <i class="fa-solid fa-plus mr-1"></i> Tambah
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Kolum Log Imbasan Terkini -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold text-slate-800">Imbasan Terkini</h3>
+                        <span id="scanner-total-badge" class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                            0 Murid
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 mb-4">
+                        Setiap imbasan akan terus dimasukkan ke paparan pengacara majlis mengikut urutan masa.
+                    </p>
+
+                    <div id="recent-scans-list" class="flex-1 overflow-y-auto max-h-[380px] space-y-2.5 pr-1">
+                        <div class="text-center py-10 text-slate-400 text-sm">
+                            Belum ada rekod imbasan dalam sesi ini.
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                        <button onclick="openResetModal()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1">
+                            <i class="fa-solid fa-rotate-right"></i> Reset Semua Giliran
+                        </button>
+                        <button onclick="switchTab('stage')" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                            Lihat Paparan Pentas <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: PENJANA KOD QR MURID                -->
+        <!-- ========================================== -->
+        <section id="view-generator" class="tab-view hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Kolum Input Senarai Nama -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 no-print">
+                    <h2 class="text-lg font-bold text-slate-800 mb-1">Jana Kod QR Murid</h2>
+                    <p class="text-xs text-slate-500 mb-4">
+                        Masukkan senarai nama murid (satu baris untuk satu murid). Gunakan tanda koma <code class="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600">,</code> untuk memisahkan Nama dan Kelas.
+                    </p>
+
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Senarai Nama & Kelas</label>
+                            <button onclick="loadSampleNames()" class="text-xs text-indigo-600 hover:underline font-medium">
+                                Isi Contoh Nama
+                            </button>
+                        </div>
+                        <textarea id="student-names-input" rows="10" 
+                            placeholder="Contoh:&#10;Ahmad bin Ali, 6 Arif&#10;Siti Nurhaliza binti Tarudin, 6 Bestari&#10;Chong Wei Feng, 5 Cemerlang"
+                            class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"></textarea>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button onclick="generateQRCards()" class="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span>Jana Kod QR</span>
+                        </button>
+                        <button onclick="window.print()" id="btn-print-qr" class="hidden py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-print"></i>
+                            <span>Cetak Semua</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Kolum Pratonton Kad QR untuk Dicetak -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-4 no-print">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800">Kad QR Murid</h3>
+                            <p class="text-xs text-slate-500">Gunting dan edarkan kepada murid sebelum majlis bermula</p>
+                        </div>
+                        <span id="qr-generated-count" class="bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1 rounded-full">
+                            0 Kad
+                        </span>
+                    </div>
+
+                    <!-- Kawasan Cetakan -->
+                    <div id="print-area" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="col-span-full text-center py-16 text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
+                            <i class="fa-solid fa-qrcode text-4xl mb-3 text-slate-300"></i>
+                            <p class="text-sm font-medium text-slate-500">Tiada kod QR dijana lagi</p>
+                            <p class="text-xs mt-1">Masukkan senarai nama di sebelah kiri dan klik "Jana Kod QR".</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Skrip Aplikasi dengan Penyegerakan Awan Masa Nyata -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Konfigurasi Awan
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-award-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let unsubscribeRoom = null;
+        let currentRoomCode = "MAJLIS-1";
+
+        // ==========================================
+        // PENGURUSAN STATE & PENYIMPANAN
+        // ==========================================
+        let studentQueue = [];
+        let html5QrcodeScanner = null;
+        let isScanning = false;
+        let lastScannedText = "";
+        let lastScannedTime = 0;
+
+        // Konteks Audio untuk bunyi 'Beep' apabila berjaya imbas
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playBeepSound() {
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.15);
+            } catch (e) {
+                console.warn("Audio tidak disokong:", e);
+            }
+        }
+
+        function updateSyncStatus(status, text) {
+            const dot = document.getElementById('sync-dot');
+            const label = document.getElementById('sync-status-text');
+            if (!dot || !label) return;
+
+            label.innerText = text;
+            dot.className = "w-2 h-2 rounded-full " + (
+                status === 'connected' ? "bg-emerald-400" :
+                status === 'error' ? "bg-rose-500" : "bg-amber-400 animate-pulse"
+            );
+        }
+
+        // Inisialisasi Pengesahan & Sambungan Awan
+        async function initCloudSync() {
+            // Semak jika kod majlis ada dalam parameter URL (?majlis=KOD)
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('majlis');
+            if (roomParam && roomParam.trim() !== "") {
+                currentRoomCode = roomParam.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+            }
+            document.getElementById('current-room-display').innerText = currentRoomCode;
+
+            if (!firebaseConfig) {
+                updateSyncStatus('error', 'Mod Luar Talian');
+                renderAll();
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) {
+                        subscribeToRoom(currentRoomCode);
+                    }
+                });
+            } catch (err) {
+                console.error("Ralat sambungan awan:", err);
+                updateSyncStatus('error', 'Ralat Sambungan');
+                renderAll();
+            }
+        }
+
+        function subscribeToRoom(roomCode) {
+            if (!db || !currentUser) return;
+            if (unsubscribeRoom) {
+                unsubscribeRoom();
+            }
+
+            updateSyncStatus('connecting', 'Menyambung...');
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'award_rooms', roomCode);
+
+            unsubscribeRoom = onSnapshot(roomDocRef, (snapshot) => {
+                updateSyncStatus('connected', 'Langsung (Sync)');
+                if (snapshot.exists()) {
+                    const data = snapshot.data();
+                    studentQueue = Array.isArray(data.queue) ? data.queue : [];
+                    if (data.awardTitle && document.activeElement.id !== 'award-title') {
+                        document.getElementById('award-title').value = data.awardTitle;
+                    }
+                } else {
+                    studentQueue = [];
+                }
+                renderAll();
+            }, (error) => {
+                console.error("Ralat mendengar perubahan:", error);
+                updateSyncStatus('error', 'Terputus');
+            });
+        }
+
+        async function saveStateToCloud() {
+            renderAll(); // Kemas kini paparan serta-merta secara optimistik
+            if (!db || !currentUser) return;
+
+            try {
+                const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'award_rooms', currentRoomCode);
+                const title = document.getElementById('award-title').value;
+                await setDoc(roomDocRef, {
+                    queue: studentQueue,
+                    awardTitle: title,
+                    updatedAt: Date.now()
+                }, { merge: true });
+            } catch (err) {
+                console.error("Gagal menyimpan ke awan:", err);
+                showToast("Gagal menyegerakkan data ke peranti lain.", "error");
+            }
+        }
+
+        window.openRoomModal = function() {
+            document.getElementById('room-code-input').value = currentRoomCode;
+            const modal = document.getElementById('room-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeRoomModal = function() {
+            const modal = document.getElementById('room-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        window.saveRoomCode = function() {
+            const rawCode = document.getElementById('room-code-input').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+            if (!rawCode) {
+                showToast("Sila masukkan kod majlis yang sah.", "warning");
+                return;
+            }
+            currentRoomCode = rawCode;
+            document.getElementById('current-room-display').innerText = currentRoomCode;
+            
+            // Kemas kini URL supaya mudah dikongsi
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('majlis', currentRoomCode);
+            window.history.replaceState({}, '', newUrl);
+
+            closeRoomModal();
+            subscribeToRoom(currentRoomCode);
+            showToast(`Disambungkan ke Kod Majlis: ${currentRoomCode}`, "success");
+        };
+
+        window.saveAwardTitle = function() {
+            saveStateToCloud();
+            showToast("Tajuk anugerah dikemas kini pada semua peranti", "info");
+        };
+
+        // Muatkan sambungan semasa halaman dibuka
+        window.addEventListener('load', () => {
+            initCloudSync();
+        });
+
+        // ==========================================
+        // NAVIGASI TAB
+        // ==========================================
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-amber-400', 'text-indigo-950', 'shadow');
+                btn.classList.add('text-indigo-200', 'hover:text-white');
+            });
+
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.remove('text-indigo-200', 'hover:text-white');
+            activeBtn.classList.add('bg-amber-400', 'text-indigo-950', 'shadow');
+
+            if (tabName !== 'scanner' && isScanning) {
+                stopScanner();
+            }
+        };
+
+        // ==========================================
+        // LOGIK GILIRAN (TAMBAH, PADAM, RESET)
+        // ==========================================
+        function addStudentToQueue(rawText) {
+            if (!rawText || rawText.trim() === "") return;
+
+            let name = rawText.trim();
+            let studentClass = "";
+
+            if (name.includes('|')) {
+                const parts = name.split('|');
+                name = parts[0].trim();
+                studentClass = parts[1] ? parts[1].trim() : "";
+            } else if (name.includes(',')) {
+                const parts = name.split(',');
+                name = parts[0].trim();
+                studentClass = parts[1] ? parts[1].trim() : "";
+            }
+
+            const isDuplicate = studentQueue.some(s => s.name.toLowerCase() === name.toLowerCase());
+            if (isDuplicate) {
+                showToast(`"${name}" sudah berada dalam senarai giliran!`, "warning");
+                return;
+            }
+
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            const newEntry = {
+                id: Date.now() + Math.random().toString(36).substr(2, 5),
+                name: name,
+                studentClass: studentClass,
+                scanTime: timeString,
+                completed: false
+            };
+
+            studentQueue.push(newEntry);
+            playBeepSound();
+            saveStateToCloud();
+            showToast(`Berjaya imbas: ${name}`, "success");
+        }
+
+        window.handleManualAdd = function(event) {
+            event.preventDefault();
+            const nameInput = document.getElementById('manual-name');
+            const classInput = document.getElementById('manual-class');
+            
+            const formatted = classInput.value.trim() 
+                ? `${nameInput.value.trim()} | ${classInput.value.trim()}`
+                : nameInput.value.trim();
+
+            addStudentToQueue(formatted);
+            nameInput.value = "";
+            classInput.value = "";
+            nameInput.focus();
+        };
+
+        window.toggleCompleteStudent = function(id) {
+            const index = studentQueue.findIndex(s => s.id === id);
+            if (index !== -1) {
+                studentQueue[index].completed = !studentQueue[index].completed;
+                saveStateToCloud();
+            }
+        };
+
+        window.markFirstAsDone = function() {
+            const activeStudents = studentQueue.filter(s => !s.completed);
+            if (activeStudents.length > 0) {
+                toggleCompleteStudent(activeStudents[0].id);
+                showToast(`${activeStudents[0].name} selesai menerima anugerah.`, "info");
+            }
+        };
+
+        window.removeStudent = function(id) {
+            studentQueue = studentQueue.filter(s => s.id !== id);
+            saveStateToCloud();
+            showToast("Nama dipadam daripada senarai.", "info");
+        };
+
+        // Kawalan Modal Reset
+        window.openResetModal = function() {
+            const modal = document.getElementById('reset-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeResetModal = function() {
+            const modal = document.getElementById('reset-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        window.confirmResetQueue = function() {
+            studentQueue = [];
+            saveStateToCloud();
+            closeResetModal();
+            showToast("Senarai giliran telah di-reset untuk kategori seterusnya!", "success");
+        };
+
+        // ==========================================
+        // PAPARAN ANTARA MUKA (RENDER UI)
+        // ==========================================
+        function renderAll() {
+            const activeStudents = studentQueue.filter(s => !s.completed);
+            const totalCount = studentQueue.length;
+
+            document.getElementById('badge-count').innerText = activeStudents.length;
+            document.getElementById('scanner-total-badge').innerText = `${totalCount} Murid`;
+
+            const highlightCard = document.getElementById('next-student-card');
+            if (activeStudents.length > 0) {
+                highlightCard.classList.remove('hidden');
+                document.getElementById('highlight-name').innerText = activeStudents[0].name;
+                document.getElementById('highlight-class').innerText = activeStudents[0].studentClass || "Penerima Anugerah";
+            } else {
+                highlightCard.classList.add('hidden');
+            }
+
+            const emptyState = document.getElementById('empty-queue-state');
+            const queueList = document.getElementById('queue-list');
+            const statusText = document.getElementById('queue-status-text');
+
+            if (totalCount === 0) {
+                emptyState.classList.remove('hidden');
+                queueList.classList.add('hidden');
+                statusText.innerText = "Menunggu imbasan...";
+            } else {
+                emptyState.classList.add('hidden');
+                queueList.classList.remove('hidden');
+                statusText.innerText = `Jumlah: ${totalCount} | Menunggu: ${activeStudents.length}`;
+
+                queueList.innerHTML = studentQueue.map((student, index) => {
+                    const orderNumber = index + 1;
+                    const isNext = activeStudents.length > 0 && activeStudents[0].id === student.id;
+                    
+                    return `
+                        <div class="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors animate-slide-in ${student.completed ? 'bg-slate-50/80 opacity-60' : isNext ? 'bg-amber-50/70' : 'hover:bg-slate-50'}">
+                            <div class="flex items-center gap-4">
+                                <div class="w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-lg shrink-0 ${
+                                    student.completed 
+                                        ? 'bg-slate-200 text-slate-500' 
+                                        : isNext 
+                                            ? 'bg-amber-400 text-indigo-950 shadow-sm' 
+                                            : 'bg-indigo-100 text-indigo-800'
+                                }">
+                                    ${orderNumber}
+                                </div>
+                                
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="font-bold text-base sm:text-lg ${student.completed ? 'line-through text-slate-500' : 'text-slate-900'}">
+                                            ${escapeHTML(student.name)}
+                                        </h4>
+                                        ${isNext ? '<span class="px-2 py-0.5 text-[10px] font-bold uppercase bg-amber-400 text-indigo-950 rounded-md">Seterusnya</span>' : ''}
+                                        ${student.completed ? '<span class="px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 rounded-md">Selesai</span>' : ''}
+                                    </div>
+                                    <div class="flex items-center gap-3 text-xs sm:text-sm text-slate-500 mt-0.5">
+                                        ${student.studentClass ? `<span class="font-medium text-indigo-600"><i class="fa-solid fa-graduation-cap mr-1"></i>${escapeHTML(student.studentClass)}</span>` : ''}
+                                        <span><i class="fa-regular fa-clock mr-1"></i>Diimbas: ${student.scanTime}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2 self-end sm:self-center">
+                                <button onclick="toggleCompleteStudent('${student.id}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                                    student.completed 
+                                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+                                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                }">
+                                    <i class="fa-solid ${student.completed ? 'fa-rotate-left' : 'fa-check'}"></i>
+                                    <span>${student.completed ? 'Batal Selesai' : 'Tanda Selesai'}</span>
+                                </button>
+                                <button onclick="removeStudent('${student.id}')" title="Padam nama" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const recentList = document.getElementById('recent-scans-list');
+            if (totalCount === 0) {
+                recentList.innerHTML = `
+                    <div class="text-center py-10 text-slate-400 text-sm">
+                        Belum ada rekod imbasan dalam sesi ini.
+                    </div>`;
+            } else {
+                const reversed = [...studentQueue].map((item, idx) => ({ ...item, queueNum: idx + 1 })).reverse();
+                recentList.innerHTML = reversed.map(item => `
+                    <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex justify-between items-center gap-2 animate-slide-in">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                                #${item.queueNum}
+                            </span>
+                            <div class="truncate">
+                                <p class="text-sm font-bold text-slate-800 truncate">${escapeHTML(item.name)}</p>
+                                <p class="text-xs text-slate-500 truncate">${escapeHTML(item.studentClass || 'Tiada kelas')} • ${item.scanTime}</p>
+                            </div>
+                        </div>
+                        <button onclick="removeStudent('${item.id}')" class="text-slate-400 hover:text-rose-600 p-1.5">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // ==========================================
+        // PENGIMBAS KOD QR KAMERA (HTML5-QRCODE)
+        // ==========================================
+        window.startScanner = async function() {
+            const placeholder = document.getElementById('camera-placeholder');
+            const btnStart = document.getElementById('btn-start-scan');
+            const btnStop = document.getElementById('btn-stop-scan');
+
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (window.location.protocol !== 'https:' && !isLocalhost) {
+                showToast("iOS Safari memerlukan sambungan HTTPS untuk mengakses kamera secara langsung. Sila guna butang 'Tangkap Foto QR' di bawah atau muat naik fail ini ke pelayan HTTPS.", "warning");
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showToast("Pelayar ini tidak menyokong akses kamera langsung. Sila buka menggunakan Safari atau guna 'Tangkap Foto QR'.", "error");
+                return;
+            }
+
+            placeholder.classList.add('hidden');
+            btnStart.classList.add('hidden');
+            btnStop.classList.remove('hidden');
+
+            try {
+                if (!html5QrcodeScanner) {
+                    html5QrcodeScanner = new Html5Qrcode("reader");
+                }
+
+                const config = { 
+                    fps: 10, 
+                    qrbox: { width: 230, height: 230 },
+                    aspectRatio: 1.0
+                };
+
+                const onScanSuccess = (decodedText) => {
+                    const now = Date.now();
+                    if (decodedText === lastScannedText && (now - lastScannedTime) < 2500) {
+                        return;
+                    }
+                    lastScannedText = decodedText;
+                    lastScannedTime = now;
+                    addStudentToQueue(decodedText);
+                };
+
+                try {
+                    await html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, () => {});
+                } catch (envErr) {
+                    const cameras = await Html5Qrcode.getCameras();
+                    if (cameras && cameras.length > 0) {
+                        const backCam = cameras[cameras.length - 1].id;
+                        await html5QrcodeScanner.start(backCam, config, onScanSuccess, () => {});
+                    } else {
+                        throw envErr;
+                    }
+                }
+
+                isScanning = true;
+            } catch (err) {
+                console.error("Gagal memulakan kamera:", err);
+                showToast("Akses kamera disekat oleh Safari/iOS. Sila benarkan kamera di Settings > Safari atau gunakan butang 'Tangkap Foto QR'.", "error");
+                stopScanner();
+            }
+        };
+
+        window.scanQRFromImage = async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                if (isScanning) {
+                    await stopScanner();
+                }
+
+                const fileScanner = new Html5Qrcode("reader");
+                const decodedText = await fileScanner.scanFile(file, true);
+                addStudentToQueue(decodedText);
+                fileScanner.clear();
+            } catch (err) {
+                console.error("Gagal membaca QR daripada gambar:", err);
+                showToast("Kod QR tidak dapat dikesan dalam gambar. Pastikan gambar jelas dan cuba lagi.", "error");
+            } finally {
+                event.target.value = "";
+            }
+        };
+
+        window.stopScanner = async function() {
+            const placeholder = document.getElementById('camera-placeholder');
+            const btnStart = document.getElementById('btn-start-scan');
+            const btnStop = document.getElementById('btn-stop-scan');
+
+            if (html5QrcodeScanner && isScanning) {
+                try {
+                    await html5QrcodeScanner.stop();
+                    html5QrcodeScanner.clear();
+                } catch (err) {
+                    console.error(err);
+                }
+                isScanning = false;
+            }
+
+            placeholder.classList.remove('hidden');
+            btnStart.classList.remove('hidden');
+            btnStop.classList.add('hidden');
+        };
+
+        // ==========================================
+        // PENJANA KOD QR MURID
+        // ==========================================
+        window.loadSampleNames = function() {
+            const sample = [
+                "Muhammad Rayyan bin Zulkifli, 6 Bestari",
+                "Nur Aina Sofea binti Ahmad, 6 Bestari",
+                "Tan Wei Ming, 6 Cemerlang",
+                "Kavitha a/p Subramaniam, 5 Arif",
+                "Adam Harith bin Ismail, 5 Bestari",
+                "Puteri Balqis binti Roslan, 4 Cemerlang"
+            ].join('\n');
+            document.getElementById('student-names-input').value = sample;
+        };
+
+        window.generateQRCards = function() {
+            const rawInput = document.getElementById('student-names-input').value;
+            const lines = rawInput.split('\n').map(line => line.trim()).filter(line => line !== "");
+
+            if (lines.length === 0) {
+                showToast("Sila masukkan sekurang-kurangnya satu nama murid.", "warning");
+                return;
+            }
+
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = "";
+
+            lines.forEach((line, index) => {
+                let name = line;
+                let studentClass = "";
+
+                if (line.includes(',')) {
+                    const parts = line.split(',');
+                    name = parts[0].trim();
+                    studentClass = parts[1] ? parts[1].trim() : "";
+                } else if (line.includes('|')) {
+                    const parts = line.split('|');
+                    name = parts[0].trim();
+                    studentClass = parts[1] ? parts[1].trim() : "";
+                }
+
+                const qrPayload = studentClass ? `${name} | ${studentClass}` : name;
+
+                const card = document.createElement('div');
+                card.className = "border-2 border-slate-300 rounded-2xl p-4 flex flex-col items-center text-center bg-white shadow-sm break-inside-avoid";
+                
+                const qrContainerId = `qr-code-${index}`;
+                card.innerHTML = `
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-indigo-600 mb-2">KAD GILIRAN ANUGERAH</span>
+                    <div id="${qrContainerId}" class="p-2 bg-white rounded-xl border border-slate-100 mb-3 flex items-center justify-center"></div>
+                    <h4 class="font-bold text-slate-900 text-sm leading-snug line-clamp-2">${escapeHTML(name)}</h4>
+                    <p class="text-xs text-slate-500 font-medium mt-1">${escapeHTML(studentClass || 'Penerima Anugerah')}</p>
+                `;
+
+                printArea.appendChild(card);
+
+                new QRCode(document.getElementById(qrContainerId), {
+                    text: qrPayload,
+                    width: 130,
+                    height: 130,
+                    colorDark: "#0f172a",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            });
+
+            document.getElementById('qr-generated-count').innerText = `${lines.length} Kad`;
+            document.getElementById('btn-print-qr').classList.remove('hidden');
+            showToast(`${lines.length} kod QR murid berjaya dijana!`, "success");
+        };
+
+        // ==========================================
+        // UTILITI (TOAST & SANITASI HTML)
+        // ==========================================
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: "bg-emerald-600 text-white",
+                warning: "bg-amber-500 text-indigo-950",
+                error: "bg-rose-600 text-white",
+                info: "bg-slate-800 text-white"
+            };
+
+            const icons = {
+                success: "fa-circle-check",
+                warning: "fa-triangle-exclamation",
+                error: "fa-circle-xmark",
+                info: "fa-circle-info"
+            };
+
+            toast.className = `${colors[type]} px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-sm font-semibold animate-slide-in pointer-events-auto`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icons[type]}"></i>
+                <span>${escapeHTML(message)}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+    </script>
+</body>
+</html>
